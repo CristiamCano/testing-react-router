@@ -1,134 +1,141 @@
 import type { Route } from "./+types/to-do-list";
-import { tasks } from "~/lib/tasks";
-import { ToDoApp } from "../components/to-do-app/to-do-app";
-import { data } from "react-router";
-
-// FakeDB
-const taskList = tasks;
-let taskIndex = taskList.length;
+import { tasks as tasksDb } from "~/lib/tasks";
+import { useState } from 'react';
+import { data, useFetcher } from "react-router";
+import { Button } from "~/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle
+} from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { TaskListItem } from "~/components/to-do-app/task-list-item"
 
 export function loader() {
+    // Fake DB
+    const taskList = tasksDb;
+    let taskIndex = taskList.length;
     return { taskList };
 }
 
 export async function action({request}: Route.ActionArgs) {
+    // Fake DB
+    const taskList = tasksDb;
+    let taskIndex = taskList.length;
     const body = await request.formData();
     const action = body.get("_action");
 
-    if (action !== "create" && action !== "delete" && action !== "check") {
-        return data(
-            { message: "Invalid Action" },
-            { status: 405 } // Method Not Allowed
-        );
-    }
-
+    
     if (action==="check"){
-
-        const taskId = body.get("id");
-        const taskIsChecked = body.get("isChecked")
-
-        if (typeof taskId !== "string") {
-            return data(
-                { message: "Invalid Id" },
-                { status: 400 }
-            );
-        }
-
-        if (typeof taskIsChecked !== "string") {
-            return data(
-                { message: "Invalid Check" },
-                { status: 400 }
-            );
-        }
-
-        if (taskIsChecked!=="false" && taskIsChecked!=="true"){
-            return data(
-                { message: "Invalid Check value" },
-                { status: 400 }
-            );
-        }
+        const taskId = body.get("id")?.toString();
+        const taskIsChecked = body.get("isChecked")?.toString();
 
         const isChecked = taskIsChecked === "true"; //True or False it is "false"
 
+        if (!taskId) {
+            return {};
+        }
         const id = parseInt(taskId);
 
         //Search the task with the id in the array
         const taskToCheck = taskList.find(task => task.id === id);
 
-        if (taskToCheck) {
-            // Change the value, "taskToCheck" is a refference of the object in array
-            taskToCheck.isChecked = isChecked;
+        if (!taskToCheck) {
             return data(
-                { message: "Task checked successfully" },
-                { status: 200 }
+                { message: "Task with ID " + id + " not found" },
+                { status: 404 }
             );
         }
-
+        // Change the value, "taskToCheck" is a reference of the object in array
+        taskToCheck.isChecked = isChecked;
         return data(
-            { message: "Task with ID " + id + " not found" },
-            { status: 404 }
+            { message: "Task checked successfully" },
+            { status: 200 }
         );
-    }
 
-    if (action==="create"){
-
-        const taskText = body.get("taskText")
-
-        if (typeof taskText !== "string") {
-            return data(
-                { message: "Invalid task Text" },
-                { status: 400 }
-            );
+    } else if (action==="create"){
+        const taskText = body.get("taskText")?.toString()
+        if (!taskText) {
+            return {};
         }
-    
-        taskIndex++;
 
-        const taskObject = {
+        taskIndex++;
+        taskList.push({
             id: taskIndex,
             task: taskText,
             isChecked: false
-        };
-
-        taskList.push(taskObject);
+        });
         
         return data(
             { message: "Task added successfully" },
             { status: 201 }
         );
-    }  
+    }   else if (action==="delete"){
 
-    if (action==="delete"){
-
-        const taskId = body.get("id");
-
-        if (typeof taskId !== "string") {
-            return data(
-                { message: "Invalid Id" },
-                { status: 400 }
-            );
+        const taskId = body.get("id")?.toString();
+        if (!taskId) {
+            return {};
         }
 
         const id = parseInt(taskId);
         const taskToDelete = taskList.findIndex(task => task.id === id);
 
-        if (taskToDelete !== -1) {
-            taskList.splice(taskToDelete, 1);
-
+        if (taskToDelete === -1) {
             return data(
-                { message: "Task with Id : " + id + "deleted" },
-                { status: 200 }
+                { message: "Task with ID " + id + " not found" },
+                { status: 404 }
             );
         }
 
+        taskList.splice(taskToDelete, 1);
         return data(
-            { message: "Task with ID " + id + " not found" },
-            { status: 404 }
+            { message: "Task with Id : " + id + "deleted" },
+            { status: 200 }
+        );
+
+    } else {
+        return data(
+            { message: "Invalid Action" },
+            { status: 405 } // Method Not Allowed
         );
     }
 }
 
-
-
 export default function ToDoList({loaderData}: Route.ComponentProps) {
-    return <ToDoApp tasks={loaderData.taskList}></ToDoApp>;
+    const fetcher = useFetcher(); // hook useFetcher to handle async request
+
+    return (
+        <div className="flex items-center justify-center">
+            <Card className="w-96">
+                <CardHeader className="gap-3">
+                    <CardTitle className="text-center">To Do App</CardTitle>
+                    <fetcher.Form 
+                        className="flex items-center space-x-2" 
+                        method="post"
+                    >
+                        <Input
+                            name="taskText"
+                            placeholder="Write a task"
+                        />
+                        <Button name="_action" value="create" type="submit">Add</Button>
+                    </fetcher.Form>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                    {
+                        loaderData.taskList.map(
+                            ({id, task, isChecked}) => (
+                                <TaskListItem
+                                    key={id}
+                                    id={id}
+                                    task={task}
+                                    isChecked = {isChecked}
+                                />
+                            )
+                        )
+                    }
+                </CardContent>
+            </Card>
+        </div>
+    );
 }
